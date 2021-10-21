@@ -83,7 +83,28 @@ public class WebjarsServlet extends HttpServlet {
             return;
         }
 
-        String eTagName;
+        if (webJarAssetLocator != null) {
+            String path = webjarsURI.substring(request.getServletPath().length());
+            logger.log(Level.FINE, "Try to resolve version for path: {0}", path);
+            // See also Spring's WebJarsResourceResolver findWebJarResourcePath() method
+            int startOffset = (path.startsWith("/") ? 1 : 0);
+            int endOffset = path.indexOf('/', 1);
+            if (endOffset != -1) {
+                String webjar = path.substring(startOffset, endOffset);
+                String partialPath = path.substring(endOffset + 1);
+                String webJarPath = null;
+                try {
+                    webJarPath = (String)getFullPathExact.invoke(webJarAssetLocator, webjar, partialPath);
+                } catch (Exception e) {
+                    logger.log(Level.FINE, "This should not happen", e);
+                }
+                if (webJarPath != null) {
+                    webjarsResourceURI = "/" + webJarPath;
+                }
+            }
+        }
+
+        String eTagName = null;
         try {
             eTagName = this.getETagName(webjarsResourceURI);
         } catch (IllegalArgumentException e) {
@@ -101,29 +122,6 @@ public class WebjarsServlet extends HttpServlet {
         }
 
         InputStream inputStream = this.getClass().getResourceAsStream(webjarsResourceURI);
-
-        if (inputStream == null && webJarAssetLocator != null) {
-            String path = webjarsURI.substring(request.getServletPath().length());
-            logger.log(Level.FINE, "Try to resolve version for path: {0}", path);
-            // See also Spring's WebJarsResourceResolver findWebJarResourcePath() method
-            int startOffset = (path.startsWith("/") ? 1 : 0);
-            int endOffset = path.indexOf('/', 1);
-            if (endOffset != -1) {
-                String webjar = path.substring(startOffset, endOffset);
-                String partialPath = path.substring(endOffset + 1);
-                String webJarPath = null;
-                try {
-                    webJarPath = (String)getFullPathExact.invoke(webJarAssetLocator, webjar, partialPath);
-                } catch (Exception e) {
-                    logger.log(Level.FINE, "This should not happen", e);
-                }
-                if (webJarPath != null) {
-                    webjarsResourceURI = "/" + webJarPath;
-                    inputStream = this.getClass().getResourceAsStream(webjarsResourceURI);
-                }
-            }
-        }
-
         if (inputStream != null) {
             try {
                 if (!disableCache) {
