@@ -104,7 +104,7 @@ public class WebjarsServlet extends HttpServlet {
             }
         }
 
-        String eTagName = null;
+        String eTagName;
         try {
             eTagName = this.getETagName(webjarsResourceURI);
         } catch (IllegalArgumentException e) {
