@@ -8,10 +8,9 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import org.webjars.WebJarAssetLocator;
 
 /**
  * <p>This servlet enables Servlet 2.x compliant containers to serve up Webjars resources</p>
@@ -43,9 +42,11 @@ public class WebjarsServlet extends HttpServlet {
 
     private boolean disableCache = false;
 
-	private WebJarAssetLocator webJarAssetLocator;
+	private Object webJarAssetLocator;
+	private Method getFullPathExact;
 
     @Override
+    @SuppressWarnings({ "rawtypes", "unchecked" })
     public void init() throws ServletException {
         ServletConfig config = getServletConfig();
         if(config == null) {
@@ -61,10 +62,11 @@ public class WebjarsServlet extends HttpServlet {
             logger.log(Level.WARNING, "The WebjarsServlet configuration parameter \"disableCache\" is invalid");
         }
         try {
-            Class.forName("org.webjars.WebJarAssetLocator");
-            webJarAssetLocator = new WebJarAssetLocator();
+            Class webJarAssetLocatorClass = Class.forName("org.webjars.WebJarAssetLocator");
+            webJarAssetLocator = webJarAssetLocatorClass.newInstance();
+            getFullPathExact = webJarAssetLocatorClass.getMethod("getFullPathExact", String.class, String.class);
             logger.log(Level.INFO, "The webjars-locator-core library is present, WebjarsServlet will try to resolve the version of requested WebJar assets (for the version agnostic way of working)");
-        } catch (ClassNotFoundException e) {
+        } catch (Exception e) {
             logger.log(Level.INFO, "The webjars-locator-core library is not present, WebjarsServlet will not try to resolve the version of requested WebJar assets (for the version agnostic way of working)");
         }
         logger.log(Level.INFO, "WebjarsServlet initialization completed");
@@ -103,13 +105,18 @@ public class WebjarsServlet extends HttpServlet {
         if (inputStream == null && webJarAssetLocator != null) {
             String path = webjarsURI.substring(request.getServletPath().length());
             logger.log(Level.FINE, "Try to resolve version for path: {0}", path);
-            // Following 7 lines copied from Spring's WebJarsResourceResolver findWebJarResourcePath() method
+            // See also Spring's WebJarsResourceResolver findWebJarResourcePath() method
             int startOffset = (path.startsWith("/") ? 1 : 0);
             int endOffset = path.indexOf('/', 1);
             if (endOffset != -1) {
                 String webjar = path.substring(startOffset, endOffset);
                 String partialPath = path.substring(endOffset + 1);
-                String webJarPath = webJarAssetLocator.getFullPathExact(webjar, partialPath);
+                String webJarPath = null;
+                try {
+                    webJarPath = (String)getFullPathExact.invoke(webJarAssetLocator, webjar, partialPath);
+                } catch (Exception e) {
+                    logger.log(Level.FINE, "This should not happen", e);
+                }
                 if (webJarPath != null) {
                     webjarsResourceURI = "/" + webJarPath;
                     inputStream = this.getClass().getResourceAsStream(webjarsResourceURI);
